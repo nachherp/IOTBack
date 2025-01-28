@@ -1,14 +1,76 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// Prisma schema for the provided database diagram with modifications
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
 generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+model Miembro {
+  id_miembro Int      @id @default(autoincrement())
+  nombre     String   @db.VarChar(255)
+  email      String   @db.VarChar(255)
+  telefono   BigInt
+  rol        String   @db.VarChar(50)
+  carga      Int
+  edad       Int // New field added
+  id_equipos Int
+
+  equipos Equipo @relation(fields: [id_equipos], references: [id_equipo])
+  recursos Recurso[]
+}
+
+model Proyecto {
+  id_proyecto Int      @id @default(autoincrement())
+  nombre      String   @db.VarChar(255)
+  descripcion String   @db.Text
+  estado      String   @db.VarChar(50)
+  fecha_inicio DateTime
+
+  equipos    Equipo[]
+  recursos   Recurso[]
+  usos       UsoRecurso[]
+}
+
+model Equipo {
+  id_equipo  Int      @id @default(autoincrement())
+  nombre     String   @db.VarChar(255)
+  id_proyecto Int
+
+  proyecto Proyecto @relation(fields: [id_proyecto], references: [id_proyecto])
+  miembros  Miembro[]
+}
+
+model Recurso {
+  id_recurso Int      @id @default(autoincrement())
+  nombre     String   @db.VarChar(255)
+  tipo       String   @db.VarChar(50)
+  estado     String   @db.VarChar(50)
+  id_proyecto Int
+  id_miembro Int
+
+  proyecto Proyecto @relation(fields: [id_proyecto], references: [id_proyecto])
+  miembro  Miembro  @relation(fields: [id_miembro], references: [id_miembro])
+  usos     UsoRecurso[] @relation("RecursoToUsoRecurso")
+}
+
+model UsoRecurso {
+  id_uso      Int      @id @default(autoincrement())
+  id_recurso  Int
+  id_proyecto Int
+  descripcion String   @db.Text
+  fecha_inicio DateTime
+  fecha_fin   DateTime
+
+  recurso  Recurso  @relation(fields: [id_recurso], references: [id_recurso], name: "RecursoToUsoRecurso")
+  proyecto Proyecto @relation(fields: [id_proyecto], references: [id_proyecto])
+}
+
+model Administrador {
+  id_admin Int      @id @default(autoincrement())
+  nombre   String   @db.VarChar(255)
+  email          String   @unique @db.VarChar(255)
+  password String   @db.VarChar(255) 
+   twoFactorCode String? @db.VarChar(6) // Código 2FA temporal
 }
