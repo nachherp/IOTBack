@@ -1,75 +1,89 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as nodemailer from 'nodemailer';
+import { PrismaService } from '../prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
+import * as qrcode from 'qrcode';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
+    private readonly jwtService: JwtService
   ) {}
 
-  async login(email: string, password: string): Promise<{ message: string }> {
-    const admin = await this.prisma.administrador.findUnique({ where: { email } });
-
-    if (!admin || admin.password !== password) {
-      throw new UnauthorizedException('Credenciales inválidas');
+  async generateTwoFactorSecret(email: string) {
+    const secret = speakeasy.generateSecret({ name: `YourAppName (${email})` });
+    if (!email) {
+      throw new Error('Email no puede ser nulo');
     }
 
-    // Generar un código 2FA
-    const twoFactorCode = speakeasy.totp({
-      secret: process.env.TWO_FACTOR_SECRET || '2fa-secret', // Genera una clave secreta (puedes usar una por usuario)
+    await this.prisma.administrador.update({
+      where: { email },
+      data: { twoFactorSecret: secret.base32 }
+    });
+
+    const qrCode = await qrcode.toDataURL(secret.otpauth_url);
+    return qrCode;
+  }
+
+  async verifyTwoFactorCode(email: string, token: string): Promise<any> {
+    const admin = await this.prisma.administrador.findUnique({ where: { email } });
+    if (!admin) {
+      console.error('Admin no encontrado para el email:', email);
+      return { success: false, message: 'Admin no encontrado' };
+    }
+    if (!admin.twoFactorSecret) {
+      console.error('No hay twoFactorSecret para el admin:', email);
+      return { success: false, message: 'No hay twoFactorSecret' };
+    }
+
+    console.log('Verificando código con secret:', admin.twoFactorSecret);
+    const isValid = speakeasy.totp.verify({
+      secret: admin.twoFactorSecret,
       encoding: 'base32',
+      token
     });
 
-    // Simular envío del código por correo (usando nodemailer)
-    await this.sendTwoFactorCode(email, twoFactorCode);
-
-    // Guardar el código en la base de datos (temporal)
-    await this.prisma.administrador.update({
-      where: { email },
-      data: { twoFactorCode }, // Asegúrate de agregar este campo en tu modelo
-    });
-
-    return { message: 'Código 2FA enviado al correo electrónico' };
+    if (isValid) {
+      console.log('Código TOTP verificado correctamente');
+      return { success: true };
+    } else {
+      console.error('Código TOTP inválido');
+      return { success: false, message: 'Código TOTP inválido' };
+    }
   }
 
-  async verify2FA(email: string, code: string): Promise<{ accessToken: string }> {
+  async register(email: string, password: string, nombre: string): Promise<any> {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await this.prisma.administrador.create({
+      data: {
+        email,
+        password: hashedPassword,
+        nombre
+      }
+    });
+    return newUser;
+  }
+
+  async login(email: string, password: string): Promise<any> {
+    const admin = await this.prisma.administrador.findUnique({ where: { email } });
+    
+    if (admin && await bcrypt.compare(password, admin.password)) {
+      const payload = { email: admin.email, sub: admin.id_admin };
+      const accessToken = this.jwtService.sign(payload);
+      return { accessToken, message: 'Código 2FA enviado', userId: admin.id_admin };
+    } else {
+      throw new Error('Credenciales de inicio de sesión inválidas');
+    }
+  }
+
+  async validateUser(email: string): Promise<any> {
     const admin = await this.prisma.administrador.findUnique({ where: { email } });
 
-    if (!admin || admin.twoFactorCode !== code) {
-      throw new UnauthorizedException('Código 2FA inválido');
+    if (admin) {
+      return admin;
     }
-
-    // Generar un token JWT
-    const payload = { sub: admin.id_admin, email: admin.email };
-    const accessToken = this.jwtService.sign(payload);
-
-    // Limpiar el código 2FA después de la validación
-    await this.prisma.administrador.update({
-      where: { email },
-      data: { twoFactorCode: null },
-    });
-
-    return { accessToken };
-  }
-
-  private async sendTwoFactorCode(email: string, code: string) {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail', // O usa el servicio de correo que prefieras
-      auth: {
-        user: process.env.EMAIL_USER, // Tu correo electrónico
-        pass: process.env.EMAIL_PASS, // Tu contraseña
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Tu código de verificación 2FA',
-      text: `Tu código de verificación es: ${code}`,
-    });
+    return null;
   }
 }
