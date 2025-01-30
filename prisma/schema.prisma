@@ -8,18 +8,21 @@ generator client {
 }
 
 model Miembro {
-  id_miembro Int      @id @default(autoincrement())
-  nombre     String   @db.VarChar(255)
-  email      String   @db.VarChar(255)
-  telefono   BigInt
-  rol        String   @db.VarChar(50)
-  carga      Int
-  edad       Int // New field added
-  id_equipos Int
+  id_miembro  Int     @id @default(autoincrement())
+  nombre      String  @db.VarChar(255)
+  email       String  @unique @db.VarChar(255)
+  telefono    BigInt?
+  rol         String? @db.VarChar(50)
+  carga       Int?
+  edad        Int?
+  id_equipos  Int?    // Ahora es opcional
+  password    String
+  twoFactorSecret String?
 
-  equipos Equipo @relation(fields: [id_equipos], references: [id_equipo])
-  recursos Recurso[]
+  equipos     Equipo? @relation(fields: [id_equipos], references: [id_equipo])
+  recurso Recurso[]
 }
+
 
 model Proyecto {
   id_proyecto Int      @id @default(autoincrement())
