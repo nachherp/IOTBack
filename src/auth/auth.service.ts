@@ -29,7 +29,7 @@ export class AuthService {
       nombre,
       twoFactorSecret: secret.base32,
       telefono: null,
-      rol: null,
+      rol: 'miembro', // Asignar el rol por defecto
       carga: null,
       edad: null,
     };
@@ -53,18 +53,21 @@ export class AuthService {
   }
 
   async login(email: string, password: string): Promise<any> {
-    const miembro = await this.prisma.miembro.findFirst({ where: { email: email } });
-    const admin = await this.prisma.administrador.findUnique({ where: { email: email } });
+    const miembro = await this.prisma.miembro.findFirst({ where: { email } });
+    const admin = await this.prisma.administrador.findUnique({ where: { email } });
+
     let user = miembro || admin;
+    let rol = user?.rol || (admin ? 'admin' : 'miembro'); // Ahora usa el rol de la DB
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw new Error('Credenciales inválidas');
+        throw new Error('Credenciales inválidas');
     }
 
-    const userId = miembro ? miembro.id_miembro : admin?.id_admin;
+    const token = await this.generateJwt(email, rol); // Generar JWT con rol
 
-    return { message: 'Código 2FA requerido', userId };
-  }
+    return { message: 'Inicio de sesión exitoso', token, rol }; // Ahora enviamos "rol" correctamente
+}
+
 
   async generateTwoFactorSecret(email: string) {
     const miembro = await this.prisma.miembro.findFirst({ where: { email: email } });
@@ -96,8 +99,8 @@ export class AuthService {
     return isValid ? { success: true } : { success: false, message: 'Código TOTP inválido' };
   }
 
-  async generateJwt(email: string): Promise<string> {
-    return this.jwtService.sign({ email });
+  async generateJwt(email: string, role: string): Promise<string> {
+    return this.jwtService.sign({ email, role });
   }
 
   async validateUser(email: string): Promise<any> {

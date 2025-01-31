@@ -12,7 +12,7 @@ model Miembro {
   nombre      String  @db.VarChar(255)
   email       String  @unique @db.VarChar(255)
   telefono    BigInt?
-  rol         String? @db.VarChar(50)
+  rol         String?   @default("miembro") @db.VarChar(50)
   carga       Int?
   edad        Int?
   id_equipos  Int?    // Ahora es opcional
@@ -77,4 +77,5 @@ model Administrador {
   password         String   @db.VarChar(255)
   twoFactorSecret  String?  // Clave secreta para Google Authenticator (almacenada de manera segura)
   createdAt        DateTime @default(now())
+   rol             String   @default("admin") @db.VarChar(50)
 }
