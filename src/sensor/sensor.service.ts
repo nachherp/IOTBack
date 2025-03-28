@@ -13,41 +13,32 @@ export class SensorService {
     try {
       const response = await axios.get(this.API_URL);
 
-      if (!response.data || !response.data.sensores) {
-        console.error(" No se recibieron datos válidos de la API.");
+      const sensores = response.data?.sensores;
+      if (!sensores) {
+        console.error("No se recibieron datos de sensores.");
         return;
       }
 
-      const { temperatura, humedad, lluvia, sol } = response.data.sensores;
-
-      if (
-        temperatura === undefined || humedad === undefined ||
-        lluvia === undefined || sol === undefined
-      ) {
-        console.error(" Datos incompletos de sensores.");
+      const { temperatura, humedad, lluvia, sol } = sensores;
+      if ([temperatura, humedad, lluvia, sol].some((v) => v === undefined)) {
+        console.error("Datos de sensores incompletos.");
         return;
       }
 
-      const lastRecord = await this.prisma.historialSensor.findFirst({
+      const last = await this.prisma.historialSensor.findFirst({
         orderBy: { fecha_registro: 'desc' },
       });
 
-      if (
-        !lastRecord ||
-        lastRecord.temperatura !== temperatura ||
-        lastRecord.humedad !== humedad ||
-        lastRecord.lluvia !== lluvia ||
-        lastRecord.sol !== sol
-      ) {
+      if (!last || last.temperatura !== temperatura || last.humedad !== humedad || last.lluvia !== lluvia || last.sol !== sol) {
         await this.prisma.historialSensor.create({
           data: { temperatura, humedad, lluvia, sol, fecha_registro: new Date() },
         });
-        console.log(' Nuevo registro de sensores guardado.');
+        console.log("✅ Nuevo registro de sensores guardado.");
       } else {
-        console.log('ℹ No hay cambios en los sensores.');
+        console.log("ℹ No hay cambios en los datos de sensores.");
       }
     } catch (error) {
-      console.error(' Error al obtener datos de sensores:', error.message);
+      console.error("❌ Error al obtener datos de sensores:", error.message);
     }
   }
 
@@ -58,11 +49,11 @@ export class SensorService {
       const parcelasAPI = response.data.parcelas;
 
       for (const parcela of parcelasAPI) {
-        const existingParcela = await this.prisma.parcela.findUnique({
+        const existente = await this.prisma.parcela.findUnique({
           where: { id_parcela: parcela.id },
         });
 
-        if (!existingParcela) {
+        if (!existente) {
           await this.prisma.parcela.create({
             data: {
               id_parcela: parcela.id,
@@ -74,14 +65,14 @@ export class SensorService {
               ultimo_riego: new Date(parcela.ultimo_riego),
             },
           });
-          console.log(`Nueva parcela agregada: ${parcela.nombre}`);
+          console.log(`🌱 Parcela creada: ${parcela.nombre}`);
         } else {
-          // Si ha cambiado algo (latitud, longitud o último riego)
-          if (
-            existingParcela.latitud !== parcela.latitud ||
-            existingParcela.longitud !== parcela.longitud ||
-            new Date(existingParcela.ultimo_riego).getTime() !== new Date(parcela.ultimo_riego).getTime()
-          ) {
+          const haCambiado =
+            existente.latitud !== parcela.latitud ||
+            existente.longitud !== parcela.longitud ||
+            new Date(existente.ultimo_riego).getTime() !== new Date(parcela.ultimo_riego).getTime();
+
+          if (haCambiado) {
             await this.prisma.parcela.update({
               where: { id_parcela: parcela.id },
               data: {
@@ -90,27 +81,27 @@ export class SensorService {
                 ultimo_riego: new Date(parcela.ultimo_riego),
               },
             });
-            console.log(` Parcela actualizada (${parcela.nombre}):  Último riego`);
+            console.log(`🔄 Parcela actualizada: ${parcela.nombre}`);
           }
         }
       }
 
-      console.log(' Parcelas activas sincronizadas.');
+      console.log("✅ Parcelas sincronizadas correctamente.");
     } catch (error) {
-      console.error(' Error al obtener parcelas:', error.message);
+      console.error("❌ Error al sincronizar parcelas:", error.message);
     }
   }
 
-  // 3. Verificar y guardar parcelas eliminadas
+  // 3. Eliminar las parcelas que ya no existen en la API
   async fetchAndStoreParcelasEliminadas() {
     try {
       const response = await axios.get(this.API_URL);
       const idsAPI = response.data.parcelas.map(p => p.id);
 
       const parcelasDB = await this.prisma.parcela.findMany();
-      const parcelasEliminadas = parcelasDB.filter(p => !idsAPI.includes(p.nombre));
+      const eliminadas = parcelasDB.filter(p => !idsAPI.includes(p.id_parcela));
 
-      for (const parcela of parcelasEliminadas) {
+      for (const parcela of eliminadas) {
         const yaExiste = await this.prisma.parcelaEliminada.findUnique({
           where: { id_parcela: parcela.id_parcela },
         });
@@ -128,18 +119,21 @@ export class SensorService {
             },
           });
 
-          await this.prisma.parcela.delete({ where: { id_parcela: parcela.id_parcela } });
-          console.log(` Parcela eliminada registrada: ${parcela.nombre}`);
+          await this.prisma.parcela.delete({
+            where: { id_parcela: parcela.id_parcela },
+          });
+
+          console.log(`🗑️ Parcela eliminada registrada: ${parcela.nombre}`);
         }
       }
 
-      console.log(' Parcelas eliminadas registradas.');
+      console.log("✅ Verificación de parcelas eliminadas completada.");
     } catch (error) {
-      console.error(' Error al verificar parcelas eliminadas:', error.message);
+      console.error("❌ Error al eliminar parcelas:", error.message);
     }
   }
 
-  // 4. Dashboard principal
+  // 4. Datos del dashboard
   async getDashboardData() {
     const lastRecord = await this.prisma.historialSensor.findFirst({
       orderBy: { fecha_registro: 'desc' },
@@ -149,7 +143,7 @@ export class SensorService {
     return { lastRecord, parcelas };
   }
 
-  // 5. Historial
+  // 5. Historial completo
   async getHistorial() {
     return this.prisma.historialSensor.findMany({
       orderBy: { fecha_registro: 'asc' },
@@ -159,13 +153,14 @@ export class SensorService {
   // 6. Parcelas eliminadas
   async getParcelasEliminadas() {
     return this.prisma.parcelaEliminada.findMany({
-      orderBy: { fecha_eliminacion: 'asc' },
+      orderBy: { fecha_eliminacion: 'desc' },
     });
   }
 
-  // 7. Parcelas disponibles
+  // 7. Parcelas activas
   async getParcelas() {
-    const parcelas = await this.prisma.parcela.findMany();
-    return { parcelas };
+    return {
+      parcelas: await this.prisma.parcela.findMany(),
+    };
   }
 }
