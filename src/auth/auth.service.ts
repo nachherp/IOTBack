@@ -16,12 +16,12 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(password, 10);
     const secret = speakeasy.generateSecret({
       length: 20,
-      name: `YourAppName (${email})`,
-      issuer: 'YourAppName'
+      name: `IOT (${email})`,
+      issuer: 'IOT'
     });
 
     // Buscar un equipo existente
-    const equipo = await this.prisma.equipo.findFirst();
+    
     
     const newMiembroData: any = {
       email,
@@ -34,9 +34,7 @@ export class AuthService {
       edad: null,
     };
     
-    if (equipo) {
-      newMiembroData.id_equipos = equipo.id_equipo;
-    }
+    
 
     const newMiembro = await this.prisma.miembro.create({
       data: newMiembroData

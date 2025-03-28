@@ -1,10 +1,21 @@
-// Prisma schema for the provided database diagram with modifications
+// Prisma schema for the database
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
 generator client {
   provider = "prisma-client-js"
+}
+
+model Administrador {
+  id_admin         Int      @id @default(autoincrement())
+  nombre           String   @db.VarChar(255)
+  email            String   @unique @db.VarChar(255)
+  password         String   @db.VarChar(255)
+  twoFactorSecret  String?  
+  createdAt        DateTime @default(now())
+  rol              String   @default("admin") @db.VarChar(50)
 }
 
 model Miembro {
@@ -13,69 +24,47 @@ model Miembro {
   email       String  @unique @db.VarChar(255)
   telefono    BigInt?
   rol         String?   @default("miembro") @db.VarChar(50)
-  carga       Int?
   edad        Int?
-  id_equipos  Int?    // Ahora es opcional
   password    String
   twoFactorSecret String?
-
-  equipos     Equipo? @relation(fields: [id_equipos], references: [id_equipo])
-  recurso Recurso[]
+  createdAt   DateTime @default(now())
 }
 
+model Parcela {
+  id_parcela     Int      @id @default(autoincrement())
+  nombre         String   @db.VarChar(255)
+  tipo_cultivo   String   @db.VarChar(255)
+  responsable    String   @db.VarChar(255)  // Se mantiene como String
+  latitud        Float    
+  longitud       Float    
+  ultimo_riego   DateTime
+  createdAt      DateTime @default(now())
 
-model Proyecto {
-  id_proyecto Int      @id @default(autoincrement())
-  nombre      String   @db.VarChar(255)
-  descripcion String   @db.Text
-  estado      String   @db.VarChar(50)
-  fecha_inicio DateTime
+  historial     HistorialSensor[]
 
-  equipos    Equipo[]
-  recursos   Recurso[]
-  usos       UsoRecurso[]
+ 
 }
 
-model Equipo {
-  id_equipo  Int      @id @default(autoincrement())
-  nombre     String   @db.VarChar(255)
-  id_proyecto Int
+model HistorialSensor {
+  id_registro    Int      @id @default(autoincrement())
+  temperatura    Float    
+  humedad        Float    
+  lluvia         Float    
+  sol            Float    
+  fecha_registro DateTime @default(now())
 
-  proyecto Proyecto @relation(fields: [id_proyecto], references: [id_proyecto])
-  miembros  Miembro[]
+  id_parcela     Int?
+  parcela        Parcela? @relation(fields: [id_parcela], references: [id_parcela])
 }
 
-model Recurso {
-  id_recurso Int      @id @default(autoincrement())
-  nombre     String   @db.VarChar(255)
-  tipo       String   @db.VarChar(50)
-  estado     String   @db.VarChar(50)
-  id_proyecto Int
-  id_miembro Int
-
-  proyecto Proyecto @relation(fields: [id_proyecto], references: [id_proyecto])
-  miembro  Miembro  @relation(fields: [id_miembro], references: [id_miembro])
-  usos     UsoRecurso[] @relation("RecursoToUsoRecurso")
+model ParcelaEliminada {
+  id                Int      @id @default(autoincrement())
+  id_parcela        Int      @unique 
+  nombre            String
+  tipo_cultivo      String
+  responsable       String
+  latitud           Float
+  longitud          Float
+  fecha_eliminacion DateTime @default(now())
 }
 
-model UsoRecurso {
-  id_uso      Int      @id @default(autoincrement())
-  id_recurso  Int
-  id_proyecto Int
-  descripcion String   @db.Text
-  fecha_inicio DateTime
-  fecha_fin   DateTime
-
-  recurso  Recurso  @relation(fields: [id_recurso], references: [id_recurso], name: "RecursoToUsoRecurso")
-  proyecto Proyecto @relation(fields: [id_proyecto], references: [id_proyecto])
-}
-
-model Administrador {
-  id_admin         Int      @id @default(autoincrement())
-  nombre           String   @db.VarChar(255)
-  email            String   @unique @db.VarChar(255)
-  password         String   @db.VarChar(255)
-  twoFactorSecret  String?  // Clave secreta para Google Authenticator (almacenada de manera segura)
-  createdAt        DateTime @default(now())
-   rol             String   @default("admin") @db.VarChar(50)
-}
